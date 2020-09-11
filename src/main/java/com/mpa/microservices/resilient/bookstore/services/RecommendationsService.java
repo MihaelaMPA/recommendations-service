@@ -2,8 +2,6 @@ package com.mpa.microservices.resilient.bookstore.services;
 
 import com.mpa.microservices.resilient.bookstore.clients.OrdersHistoryClient;
 import feign.RetryableException;
-import feign.codec.Decoder;
-import feign.codec.Decoder.Default;
 import feign.jackson.JacksonDecoder;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker.State;
@@ -20,9 +18,7 @@ import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cloud.openfeign.support.ResponseEntityDecoder;
 import org.springframework.cloud.openfeign.support.SpringMvcContract;
-import org.springframework.http.codec.json.Jackson2JsonDecoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -30,6 +26,9 @@ public class RecommendationsService {
 
     @Autowired
     CircuitBreakerRegistry circuitBreakerRegistry;
+
+    @Autowired
+    RateLimiterRegistry rateLimiterRegistry;
 
     private RecommendationsServiceFallback recommendationsServiceFallback;
     private OrdersHistoryClient ordersHistoryClient;
@@ -140,7 +139,7 @@ public class RecommendationsService {
         return orderHistory.subList(0, 2);
     }
 
-    //1 request/1 second. Any other requests will wait for 1 s before throwing exception
+    //1 request/1 second. Any other requests will wait for 250 ms before throwing exception
     public void callOrderHistoryWithRateLimiter() throws InterruptedException {
         RateLimiterConfig config = RateLimiterConfig.custom()
                 //allow 1 calls ->  1 active permissions
@@ -156,7 +155,7 @@ public class RecommendationsService {
 
         // Make 4 calls using service client mimicking 4 parallel users.
         for (int i = 0; i < 4; i++) {
-            System.out.println(LocalTime.now() + "call-" + (i + 1));
+            System.out.println(LocalTime.now() + " call-" + (i + 1));
             new Thread(() -> {
                 Runnable runnable = () -> ordersHistoryClient.getOrdersForRL();
                 rateLimiter.executeRunnable(runnable);
@@ -168,6 +167,7 @@ public class RecommendationsService {
     }
 
     public List<String> getOrderHistoryRL() {
+        printRateLimiterConfigs(rateLimiterRegistry.rateLimiter("propsRL"));
         return ordersHistoryClient.getOrdersForRL();
     }
 

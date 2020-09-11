@@ -4,8 +4,7 @@ import com.mpa.microservices.resilient.bookstore.exceptions.CallUnsuccessful;
 import com.mpa.microservices.resilient.bookstore.services.RecommendationsService;
 import feign.RetryableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.feign.FeignDecorators;
-import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import java.util.List;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,7 +35,7 @@ public class CircuitBreakerRecommendationsController {
     //Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
     //so Retry is applied at the end (if needed).
     @CircuitBreaker(name = "annotationCB", fallbackMethod = "getDefaultRecommendations")
-//    @RateLimiter(name = "propsRL")
+    @RateLimiter(name = "propsRL")
     public List<String> getRecommendationsWithFallbackAnnotation() {
         return recommendationsService.getRecommendationsAnnotationCB();
     }
