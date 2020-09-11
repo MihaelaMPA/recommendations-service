@@ -1,0 +1,23 @@
+server:
+   port: 9090
+
+resilience4j.circuitbreaker:
+  configs:
+    default:
+      slidingWindowSize: 8
+      permittedNumberOfCallsInHalfOpenState: 3
+      waitDurationInOpenState: 10000
+      failureRateThreshold: 60
+  instances:
+    propsCB:
+      baseConfig: default
+      permittedNumberOfCallsInHalfOpenState: 24
+      waitDurationInOpenState: 5000
+
+resilience4j.ratelimiter:
+  instances:
+    propsRL:
+      limitForPeriod: 1
+      limitRefreshPeriod: 2s
+      timeoutDuration: 250
+
