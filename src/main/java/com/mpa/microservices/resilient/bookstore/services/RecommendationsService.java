@@ -1,6 +1,7 @@
 package com.mpa.microservices.resilient.bookstore.services;
 
 import com.mpa.microservices.resilient.bookstore.clients.OrdersHistoryClient;
+import com.mpa.microservices.resilient.bookstore.exceptions.CallUnsuccessful;
 import feign.RetryableException;
 import feign.jackson.JacksonDecoder;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -14,9 +15,11 @@ import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import io.vavr.control.Try;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import org.apache.tomcat.jni.Local;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.openfeign.support.SpringMvcContract;
 import org.springframework.stereotype.Service;
@@ -24,19 +27,20 @@ import org.springframework.stereotype.Service;
 @Service
 public class RecommendationsService {
 
-    @Autowired
-    CircuitBreakerRegistry circuitBreakerRegistry;
-
-    @Autowired
-    RateLimiterRegistry rateLimiterRegistry;
+    private int counter = 0;
 
     private RecommendationsServiceFallback recommendationsServiceFallback;
     private OrdersHistoryClient ordersHistoryClient;
+    private CircuitBreakerRegistry circuitBreakerRegistry;
+    private RateLimiterRegistry rateLimiterRegistry;
 
     public RecommendationsService(RecommendationsServiceFallback recommendationsServiceFallback,
-            OrdersHistoryClient ordersHistoryClient) {
+            OrdersHistoryClient ordersHistoryClient, CircuitBreakerRegistry circuitBreakerRegistry,
+            RateLimiterRegistry rateLimiterRegistry) {
         this.recommendationsServiceFallback = recommendationsServiceFallback;
         this.ordersHistoryClient = ordersHistoryClient;
+        this.rateLimiterRegistry = rateLimiterRegistry;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
     }
 
     //call order history service directly
@@ -90,23 +94,13 @@ public class RecommendationsService {
     public List<String> getRecommendations() {
         List<String> orderHistory = Collections.emptyList();
         CircuitBreakerConfig countBasedCBConfig = CircuitBreakerConfig.custom()
-                //the size of the sliding window which is used to record the outcome of calls when the CircuitBreaker is closed.
                 .slidingWindowSize(4)
-                //When the failure rate is equal or greater than the threshold the CircuitBreaker transitions to open
                 .failureRateThreshold(50)
-                //The time that the CircuitBreaker should wait before transitioning from open to half-open.
                 .waitDurationInOpenState(Duration.ofSeconds(2))
-                //CircuitBreaker will automatically transition from open to half-open state and no call is needed
-                //to trigger the transition.
                 .automaticTransitionFromOpenToHalfOpenEnabled(true)
-                //the number of permitted calls when the CircuitBreaker is half open.
                 .permittedNumberOfCallsInHalfOpenState(2)
-//                .ignoreExceptions(CallUnsuccessful.class)
+//                .ignoreExceptions(RetryableException.class)
                 .build();
-        //inregistreaza 4 calluri ianinte de a lua decizia de OPEN (de a continua logica de mai jos
-        //daca 50% din calluri failuie (2)  -> OPEN
-        //asteapta 2s in OPEN inainte de a trece in HALF-OPEN
-        //numara 2 calluri in HALF-OPEN inainte de a decide daca treci in CLOSE sau OPEN
 
         //STATE: CLOSED -> 2 exceptions must be triggered in order to switch from CLOSED -> OPEN
         // (failureRateThreshold = 50%)
@@ -139,41 +133,20 @@ public class RecommendationsService {
         return orderHistory.subList(0, 2);
     }
 
-    //1 request/1 second. Any other requests will wait for 250 ms before throwing exception
-    public void callOrderHistoryWithRateLimiter() throws InterruptedException {
-        RateLimiterConfig config = RateLimiterConfig.custom()
-                //allow 1 calls ->  1 active permissions
-                .limitForPeriod(1)
-                //every 1 seconds -> 1s for a cycle
-                .limitRefreshPeriod(Duration.ofSeconds(1))
-                //keep other calls waiting until maximum of 250ms -> throws RequestNotPermitted
-                .timeoutDuration(Duration.ofMillis(250))
-                .build();
-
-        RateLimiterRegistry rateLimiterRegistry = RateLimiterRegistry.of(config);
-        RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("orderHistoryRL");
-
-        // Make 4 calls using service client mimicking 4 parallel users.
-        for (int i = 0; i < 4; i++) {
-            System.out.println(LocalTime.now() + " call-" + (i + 1));
-            new Thread(() -> {
-                Runnable runnable = () -> ordersHistoryClient.getOrdersForRL();
-                rateLimiter.executeRunnable(runnable);
-            }, "call-" + (i + 1)).start();
-            printMetrics(rateLimiter);
-            Thread.sleep(50);
+    public List<String> getOrderHistoryRL(String id) {
+        counter++;
+        System.out.println(Instant.now() + " call " + counter);
+        if ("1".equals(id)) {
+            RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
+            rateLimiter.changeLimitForPeriod(3);
         }
-
-    }
-
-    public List<String> getOrderHistoryRL() {
-        printRateLimiterConfigs(rateLimiterRegistry.rateLimiter("propsRL"));
+//        printRateLimiterConfigs(rateLimiter);
         return ordersHistoryClient.getOrdersForRL();
     }
 
     public List<String> getRecommendationsFeignBuilder() {
-        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("defaultCB");
-        RateLimiter rateLimiter = RateLimiter.ofDefaults("defaultRL");
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("propsCB");
+        RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
         FeignDecorators decorators = FeignDecorators.builder()
                 .withRateLimiter(rateLimiter)
                 .withCircuitBreaker(circuitBreaker)

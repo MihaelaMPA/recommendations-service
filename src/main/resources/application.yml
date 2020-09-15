@@ -18,6 +18,6 @@ resilience4j.ratelimiter:
   instances:
     propsRL:
       limitForPeriod: 1
-      limitRefreshPeriod: 2s
-      timeoutDuration: 250
+      limitRefreshPeriod: 1s
+      timeoutDuration: 1s
 

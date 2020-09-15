@@ -6,6 +6,7 @@ import feign.RetryableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,14 +20,19 @@ public class CircuitBreakerRecommendationsController {
         this.recommendationsService = recommendationsService;
     }
 
-    @RequestMapping("/nocb")
+    @GetMapping
     public List<String> getRecommendationsNoCB() {
         return recommendationsService.getRecommendationsNoCB();
     }
 
-    @RequestMapping("/fb")
+    @RequestMapping("/fallback")
     public List<String> getRecommendationsWithFallback() {
         return recommendationsService.getRecommendationsWithFallback();
+    }
+
+    @GetMapping("/states")
+    public List<String> getRecommendations() {
+        return recommendationsService.getRecommendations();
     }
 
     @RequestMapping("/afb")
@@ -35,18 +41,13 @@ public class CircuitBreakerRecommendationsController {
     //Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
     //so Retry is applied at the end (if needed).
     @CircuitBreaker(name = "annotationCB", fallbackMethod = "getDefaultRecommendations")
-    @RateLimiter(name = "propsRL")
+//    @RateLimiter(name = "propsRL")
     public List<String> getRecommendationsWithFallbackAnnotation() {
         return recommendationsService.getRecommendationsAnnotationCB();
     }
 
-    @RequestMapping
-    public List<String> getRecommendations() {
-        return recommendationsService.getRecommendations();
-    }
-
     @RequestMapping("/props")
-    //propsCB will take the props from deafult  + instance overrides application.yml ;
+    //propsCB will take the props from default  + instance overrides application.yml ;
     @CircuitBreaker(name = "propsCB")
     public List<String> getRecommendationsCBProps() {
         return recommendationsService.getRecommendationsFromProps();
