@@ -42,19 +42,17 @@ public class RecommendationsService {
         this.circuitBreakerRegistry = circuitBreakerRegistry;
     }
 
-    //call order history service directly
     public List<String> getRecommendationsNoCB() {
         return ordersHistoryClient.getOrdersForCB("1").subList(0, 2);
     }
 
-    //call order history service directly
     public List<String> getRecommendationsAnnotationCB() {
         CircuitBreaker annotationCB = circuitBreakerRegistry.circuitBreaker("annotationCB");
         printCircuitBreakerConfigs(annotationCB);
         return ordersHistoryClient.getOrdersForCB("2").subList(0, 2);
     }
 
-    //call order history service with a default config CB and Fallback
+    //call order history service with a default config CB and fallback
     public List<String> getRecommendationsWithFallback() {
         /*
          * Circuit breaker with default configurations:
@@ -68,7 +66,7 @@ public class RecommendationsService {
          * DEFAULT_WAIT_DURATION_IN_OPEN_STATE = 60 Seconds --> Wait this much time in
          * open state before moving to half open.
          * DEFAULT_PERMITTED_CALLS_IN_HALF_OPEN_STATE = 10 --> COunt these many calls in
-         * half open to decide if circuit breaker can be completely open. *
+         * half open to decide if circuit breaker can be completely open.
          */
         CircuitBreaker defaultCB = CircuitBreaker.ofDefaults("default");
         List<String> orders = defaultCB

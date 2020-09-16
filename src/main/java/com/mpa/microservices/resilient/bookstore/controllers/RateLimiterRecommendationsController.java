@@ -24,7 +24,7 @@ public class RateLimiterRecommendationsController {
         return recommendationsService.getOrderHistoryRL(id);
     }
 
-    @RequestMapping("/webclient")
+    @GetMapping("/webclient")
     public List<String> getRecommendationsCBProps() {
         return recommendationsService.getRecommendationsWebClient();
     }
