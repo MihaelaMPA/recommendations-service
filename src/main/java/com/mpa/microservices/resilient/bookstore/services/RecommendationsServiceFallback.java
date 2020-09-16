@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 public class RecommendationsServiceFallback {
 
     public List<String> getDefaultRecommendations() throws CallUnsuccessful {
-        return List.of("Java Fallback Book 1", "Java Fallback Book 2");
+        return List.of("Fallback Java Book 1", "Fallback Java Book 2");
     }
 }
 

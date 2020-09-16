@@ -1,7 +1,6 @@
 package com.mpa.microservices.resilient.bookstore.services;
 
 import com.mpa.microservices.resilient.bookstore.clients.OrdersHistoryClient;
-import com.mpa.microservices.resilient.bookstore.exceptions.CallUnsuccessful;
 import feign.RetryableException;
 import feign.jackson.JacksonDecoder;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -13,16 +12,16 @@ import io.github.resilience4j.feign.Resilience4jFeign;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
+import io.github.resilience4j.reactor.ratelimiter.operator.RateLimiterOperator;
 import io.vavr.control.Try;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
-import org.apache.tomcat.jni.Local;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.openfeign.support.SpringMvcContract;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 @Service
 public class RecommendationsService {
@@ -82,12 +81,22 @@ public class RecommendationsService {
         return orders.subList(0, 2);
     }
 
-    //default from props is actually a CircuitBreakerConfig and instance = circuitbreaker
-    public List<String> getRecommendationsFromProps() {
-        CircuitBreaker propsCB = circuitBreakerRegistry.circuitBreaker("propsCB");
-        printCircuitBreakerConfigs(propsCB);
-        List<String> orders = ordersHistoryClient.getOrdersForCB("1");
-        return orders;
+    public List<String> getRecommendationsWebClient() {
+        RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
+        WebClient webClient = WebClient.builder()
+                .baseUrl("http://localhost:9091")
+                .build();
+        Mono<List> listMono = webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/ordersHistoryRL")
+
+                        .build())
+                .retrieve()
+                .bodyToMono(List.class)
+                .transform(RateLimiterOperator.of(rateLimiter))
+                .onErrorResume(error -> Mono.just(recommendationsServiceFallback.getDefaultRecommendations()));
+
+        return listMono.block(Duration.ofSeconds(1));
     }
 
 
@@ -114,7 +123,7 @@ public class RecommendationsService {
 //        countBasedCB.transitionToForcedOpenState();
         printCircuitBreakerConfigs(countBasedCB);
         for (int i = 1; i <= 10; i++) {
-            System.out.println("counter = " + i);
+            System.out.println("call  = " + i);
             if (i == 4 && countBasedCB.getState().equals(State.FORCED_OPEN)) {
                 countBasedCB.reset();
             }
@@ -140,7 +149,6 @@ public class RecommendationsService {
             RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
             rateLimiter.changeLimitForPeriod(3);
         }
-//        printRateLimiterConfigs(rateLimiter);
         return ordersHistoryClient.getOrdersForRL();
     }
 

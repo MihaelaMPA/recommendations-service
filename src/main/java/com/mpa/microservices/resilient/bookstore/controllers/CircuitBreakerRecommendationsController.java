@@ -35,7 +35,7 @@ public class CircuitBreakerRecommendationsController {
         return recommendationsService.getRecommendations();
     }
 
-    @RequestMapping("/afb")
+    @RequestMapping("/annotation")
     //annotationCB will take the default props from application.yml;
     //The Resilience4j Aspects order is following:
     //Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
@@ -46,23 +46,16 @@ public class CircuitBreakerRecommendationsController {
         return recommendationsService.getRecommendationsAnnotationCB();
     }
 
-    @RequestMapping("/props")
-    //propsCB will take the props from default  + instance overrides application.yml ;
-    @CircuitBreaker(name = "propsCB")
-    public List<String> getRecommendationsCBProps() {
-        return recommendationsService.getRecommendationsFromProps();
-    }
-
    @RequestMapping("/feignBuilder")
    public List<String> getRecommendationsFeignBuilder(){
         return recommendationsService.getRecommendationsFeignBuilder();
    }
 
     public List<String> getDefaultRecommendations(RetryableException e) {
-        return List.of("Java Fallback Book 1", "Java Fallback Book 2");
+        return List.of("Fallback Java Book 1", "Fallback Java Book 2");
     }
 
     public List<String> getDefaultRecommendations(CallUnsuccessful e) {
-        return List.of("Java Fallback Book 3", "Java Fallback Book 4");
+        return List.of("Fallback Java Book 3", "Fallback Java Book 4");
     }
 }
