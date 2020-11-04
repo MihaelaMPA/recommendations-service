@@ -1,6 +1,6 @@
 package com.mpa.microservices.resilient.bookstore.controllers;
 
-import com.mpa.microservices.resilient.bookstore.services.RecommendationsService;
+import com.mpa.microservices.resilient.bookstore.services.RateLimiterRecommendationsService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,20 +12,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/ratelimiter")
 public class RateLimiterRecommendationsController {
 
-    private RecommendationsService recommendationsService;
+    private RateLimiterRecommendationsService rateLimiterRecommendationsService;
 
-    public RateLimiterRecommendationsController(RecommendationsService recommendationsService) {
-        this.recommendationsService = recommendationsService;
+    public RateLimiterRecommendationsController(
+            RateLimiterRecommendationsService rateLimiterRecommendationsService) {
+        this.rateLimiterRecommendationsService = rateLimiterRecommendationsService;
     }
 
     @GetMapping("/{id}")
     @RateLimiter(name = "propsRL")
-    public List<String> getRecommendationsWithRateLimiterProps(@PathVariable String id) throws InterruptedException {
-        return recommendationsService.getOrderHistoryRL(id);
+    public List<String> getRecommendationsWithRateLimiterProps(@PathVariable String id) {
+        return rateLimiterRecommendationsService.getOrderHistoryRL(id);
     }
 
     @GetMapping("/webclient")
     public List<String> getRecommendationsCBProps() {
-        return recommendationsService.getRecommendationsWebClient();
+        return rateLimiterRecommendationsService.getRecommendationsWebClient();
     }
 }

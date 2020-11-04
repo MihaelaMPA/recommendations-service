@@ -1,10 +1,9 @@
 package com.mpa.microservices.resilient.bookstore.controllers;
 
 import com.mpa.microservices.resilient.bookstore.exceptions.CallUnsuccessful;
-import com.mpa.microservices.resilient.bookstore.services.RecommendationsService;
+import com.mpa.microservices.resilient.bookstore.services.CircuitBreakerRecommendationsService;
 import feign.RetryableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,42 +13,52 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/recommendations")
 public class CircuitBreakerRecommendationsController {
 
-    private RecommendationsService recommendationsService;
+    private CircuitBreakerRecommendationsService circuitBreakerRecommendationsService;
 
-    public CircuitBreakerRecommendationsController(RecommendationsService recommendationsService) {
-        this.recommendationsService = recommendationsService;
+    public CircuitBreakerRecommendationsController(
+            CircuitBreakerRecommendationsService circuitBreakerRecommendationsService) {
+        this.circuitBreakerRecommendationsService = circuitBreakerRecommendationsService;
     }
 
     @GetMapping
     public List<String> getRecommendationsNoCB() {
-        return recommendationsService.getRecommendationsNoCB();
+        return circuitBreakerRecommendationsService.getRecommendationsNoCB();
     }
 
     @GetMapping("/fallback")
     public List<String> getRecommendationsWithFallback() {
-        return recommendationsService.getRecommendationsWithFallback();
+        return circuitBreakerRecommendationsService.getRecommendationsWithFallback();
     }
 
     @GetMapping("/states")
     public List<String> getRecommendations() {
-        return recommendationsService.getRecommendations();
+        return circuitBreakerRecommendationsService.getRecommendations();
     }
 
     @GetMapping("/annotation")
-    //annotationCB will take the default props from application.yml;
-    //The Resilience4j Aspects order is following:
-    //Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
-    //so Retry is applied at the end (if needed).
+    /*
+    annotationCB will take the default props from application.yml;
+    The Resilience4j Aspects order is following:
+    Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
+    so Retry is applied at the end (if needed).
+    */
     @CircuitBreaker(name = "annotationCB", fallbackMethod = "getDefaultRecommendations")
 //    @RateLimiter(name = "propsRL")
     public List<String> getRecommendationsWithFallbackAnnotation() {
-        return recommendationsService.getRecommendationsAnnotationCB();
+        return circuitBreakerRecommendationsService.getRecommendationsAnnotationCB();
     }
 
     @GetMapping("/feignBuilder")
-   public List<String> getRecommendationsFeignBuilder(){
-        return recommendationsService.getRecommendationsFeignBuilder();
-   }
+    public List<String> getRecommendationsFeignBuilder() {
+        return circuitBreakerRecommendationsService.getRecommendationsFeignBuilder();
+    }
+
+   /*
+   Fallback methods -> should be placed in the same class
+                    -> must have the same method signature with just ONE extra target exception parameter.
+
+    If there are multiple fallbackMethod methods, the method that has the most closest match will be invoked
+    */
 
     public List<String> getDefaultRecommendations(RetryableException e) {
         return List.of("Fallback Java Book 1", "Fallback Java Book 2");

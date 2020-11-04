@@ -3,6 +3,7 @@ package com.mpa.microservices.resilient.bookstore.services;
 import com.mpa.microservices.resilient.bookstore.clients.OrdersHistoryClient;
 import feign.RetryableException;
 import feign.jackson.JacksonDecoder;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker.State;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -12,28 +13,23 @@ import io.github.resilience4j.feign.Resilience4jFeign;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
-import io.github.resilience4j.reactor.ratelimiter.operator.RateLimiterOperator;
 import io.vavr.control.Try;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import org.springframework.cloud.openfeign.support.SpringMvcContract;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 @Service
-public class RecommendationsService {
-
-    private int counter = 0;
+public class CircuitBreakerRecommendationsService {
 
     private RecommendationsServiceFallback recommendationsServiceFallback;
     private OrdersHistoryClient ordersHistoryClient;
     private CircuitBreakerRegistry circuitBreakerRegistry;
+    private CircuitBreakerConfig circuitBreakerConfig;
     private RateLimiterRegistry rateLimiterRegistry;
 
-    public RecommendationsService(RecommendationsServiceFallback recommendationsServiceFallback,
+    public CircuitBreakerRecommendationsService(RecommendationsServiceFallback recommendationsServiceFallback,
             OrdersHistoryClient ordersHistoryClient, CircuitBreakerRegistry circuitBreakerRegistry,
             RateLimiterRegistry rateLimiterRegistry) {
         this.recommendationsServiceFallback = recommendationsServiceFallback;
@@ -43,60 +39,36 @@ public class RecommendationsService {
     }
 
     public List<String> getRecommendationsNoCB() {
-        return ordersHistoryClient.getOrdersForCB("1").subList(0, 2);
+        return ordersHistoryClient.getOrdersForCB().subList(0, 2);
     }
 
     public List<String> getRecommendationsAnnotationCB() {
         CircuitBreaker annotationCB = circuitBreakerRegistry.circuitBreaker("annotationCB");
         printCircuitBreakerConfigs(annotationCB);
-        return ordersHistoryClient.getOrdersForCB("2").subList(0, 2);
+        return ordersHistoryClient.getOrdersException().subList(0, 2);
     }
 
     //call order history service with a default config CB and fallback
     public List<String> getRecommendationsWithFallback() {
-        /*
-         * Circuit breaker with default configurations:
-         * DEFAULT_SLIDING_WINDOW_TYPE = SlidingWindowType.COUNT_BASED --> State change
-         * will happen based on count of failed calls.
-         * DEFAULT_RECORD_EXCEPTION_PREDICATE --> All exception recorded as failures
-         * DEFAULT_MINIMUM_NUMBER_OF_CALLS = 100 DEFAULT_SLIDING_WINDOW_SIZE = 100; -->
-         * Minimum number of calls to record before decision to open.
-         * DEFAULT_FAILURE_RATE_THRESHOLD = 50% --> Out of recorded calls, if 50% calls
-         * are failure, then open circuit breaker
-         * DEFAULT_WAIT_DURATION_IN_OPEN_STATE = 60 Seconds --> Wait this much time in
-         * open state before moving to half open.
-         * DEFAULT_PERMITTED_CALLS_IN_HALF_OPEN_STATE = 10 --> COunt these many calls in
-         * half open to decide if circuit breaker can be completely open.
-         */
         CircuitBreaker defaultCB = CircuitBreaker.ofDefaults("default");
         List<String> orders = defaultCB
-                .decorateTrySupplier(() -> Try.ofSupplier(() -> ordersHistoryClient.getOrdersForCB("1")))
-                .get()
+                //decorate and execute Supplier
+                //handle exceptions in a functional way with Try from Vavr-> https://www.baeldung.com/vavr-try
+
+                //we are not obliged to use try, as a matter of a fact you will see the
+                //try catch block for the same call
+                // you can think of Try like Optional, but in case of exception it is not empty, it contains the
+                //exception. To avoid
+                .executeTrySupplier(() -> Try.of(() -> ordersHistoryClient.getOrdersForCB()))
+                //fallback (we can even fallback from CallNotPermittedException)
                 .recover(RetryableException.class,
+                        exception -> recommendationsServiceFallback.getDefaultRecommendations())
+                .recover(CallNotPermittedException.class,
                         exception -> recommendationsServiceFallback.getDefaultRecommendations())
                 .get();
         printCircuitBreakerConfigs(defaultCB);
         return orders.subList(0, 2);
     }
-
-    public List<String> getRecommendationsWebClient() {
-        RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
-        WebClient webClient = WebClient.builder()
-                .baseUrl("http://localhost:9091")
-                .build();
-        Mono<List> listMono = webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/ordersHistoryRL")
-
-                        .build())
-                .retrieve()
-                .bodyToMono(List.class)
-                .transform(RateLimiterOperator.of(rateLimiter))
-                .onErrorResume(error -> Mono.just(recommendationsServiceFallback.getDefaultRecommendations()));
-
-        return listMono.block(Duration.ofSeconds(1));
-    }
-
 
     public List<String> getRecommendations() {
         List<String> orderHistory = Collections.emptyList();
@@ -106,7 +78,7 @@ public class RecommendationsService {
                 .waitDurationInOpenState(Duration.ofSeconds(2))
                 .automaticTransitionFromOpenToHalfOpenEnabled(true)
                 .permittedNumberOfCallsInHalfOpenState(2)
-//                .ignoreExceptions(RetryableException.class)
+//                .ignoreExceptions(CallUnsuccessful.class, ExceptionInInitializerError.class)
                 .build();
 
         //STATE: CLOSED -> 2 exceptions must be triggered in order to switch from CLOSED -> OPEN
@@ -128,8 +100,8 @@ public class RecommendationsService {
             try {
                 // Call service every 1 second.
                 Thread.sleep(1000);
-                // Decorate service call in circuit breaker
-                orderHistory = countBasedCB.executeSupplier(() -> ordersHistoryClient.getOrdersForCB("1"));
+                // Decorate service call with CB and execute
+                orderHistory = countBasedCB.executeSupplier(() -> ordersHistoryClient.getOrdersForCB());
                 System.out.println(orderHistory);
             } catch (Exception e) {
                 System.out.println("----> " + e.getClass().getName());
@@ -140,19 +112,10 @@ public class RecommendationsService {
         return orderHistory.subList(0, 2);
     }
 
-    public List<String> getOrderHistoryRL(String id) {
-        counter++;
-        System.out.println(Instant.now() + " call " + counter);
-        if ("1".equals(id)) {
-            RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
-            rateLimiter.changeLimitForPeriod(3);
-        }
-        return ordersHistoryClient.getOrdersForRL();
-    }
-
     public List<String> getRecommendationsFeignBuilder() {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("propsCB");
         RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
+        //The order in which decorators are applied correspond to the order in which they are declared.
         FeignDecorators decorators = FeignDecorators.builder()
                 .withRateLimiter(rateLimiter)
                 .withCircuitBreaker(circuitBreaker)
@@ -186,12 +149,6 @@ public class RecommendationsService {
                         .getPermittedNumberOfCallsInHalfOpenState())
                 .toString();
         System.out.println(cbConfigs);
-    }
-
-    private void printMetrics(RateLimiter rateLimiter) {
-        System.out.println(new StringBuilder().append("Waiting threads: ")
-                .append(rateLimiter.getMetrics().getNumberOfWaitingThreads()).append(" | Available permissions: ")
-                .append(rateLimiter.getMetrics().getAvailablePermissions()));
     }
 
     private void printRateLimiterConfigs(RateLimiter rateLimiter) {
