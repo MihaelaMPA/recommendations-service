@@ -6,7 +6,6 @@ import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import io.github.resilience4j.reactor.ratelimiter.operator.RateLimiterOperator;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -48,9 +47,8 @@ public class RateLimiterRecommendationsService {
         return listMono.block(Duration.ofSeconds(1));
     }
 
+    @io.github.resilience4j.ratelimiter.annotation.RateLimiter(name = "propsRL")
     public List<String> getOrderHistoryRL(String id) {
-        counter++;
-        System.out.println(Instant.now() + " call " + counter);
         if ("1".equals(id)) {
             RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
             rateLimiter.changeLimitForPeriod(3);

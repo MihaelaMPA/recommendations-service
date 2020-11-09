@@ -16,7 +16,7 @@ resilience4j.circuitbreaker:
     oldCB:
       baseConfig: default
       permittedNumberOfCallsInHalfOpenState: 11
-# circuit-breaker-aspect-order: 2
+# circuit-breaker-aspect-order: 1
 
 
 resilience4j.ratelimiter:
@@ -25,4 +25,4 @@ resilience4j.ratelimiter:
       limitForPeriod: 1
       limitRefreshPeriod: 1s
       timeoutDuration: 1s
-# rate-limiter-aspect-order: 1
+# rate-limiter-aspect-order: 2

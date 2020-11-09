@@ -1,7 +1,6 @@
 package com.mpa.microservices.resilient.bookstore.controllers;
 
 import com.mpa.microservices.resilient.bookstore.services.RateLimiterRecommendationsService;
-import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +19,6 @@ public class RateLimiterRecommendationsController {
     }
 
     @GetMapping("/{id}")
-    @RateLimiter(name = "propsRL")
     public List<String> getRecommendationsWithRateLimiterProps(@PathVariable String id) {
         return rateLimiterRecommendationsService.getOrderHistoryRL(id);
     }

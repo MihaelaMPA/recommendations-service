@@ -1,6 +1,7 @@
 package com.mpa.microservices.resilient.bookstore.services;
 
 import com.mpa.microservices.resilient.bookstore.clients.OrdersHistoryClient;
+import com.mpa.microservices.resilient.bookstore.exceptions.CallUnsuccessful;
 import feign.RetryableException;
 import feign.jackson.JacksonDecoder;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
@@ -40,12 +41,6 @@ public class CircuitBreakerRecommendationsService {
 
     public List<String> getRecommendationsNoCB() {
         return ordersHistoryClient.getOrdersForCB().subList(0, 2);
-    }
-
-    public List<String> getRecommendationsAnnotationCB() {
-        CircuitBreaker annotationCB = circuitBreakerRegistry.circuitBreaker("annotationCB");
-        printCircuitBreakerConfigs(annotationCB);
-        return ordersHistoryClient.getOrdersException().subList(0, 2);
     }
 
     //call order history service with a default config CB and fallback
@@ -111,6 +106,37 @@ public class CircuitBreakerRecommendationsService {
         return orderHistory.subList(0, 2);
     }
 
+
+    /*
+    annotationCB will take the default props from application.yml;
+    The Resilience4j Aspects order is following:
+    Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
+     so Retry is applied at the end (if needed).
+     */
+    @io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker(name = "annotationCB"
+            , fallbackMethod = "getDefaultRecommendations")
+//    @RateLimiter(name = "propsRL")
+    public List<String> getRecommendationsAnnotationCB() {
+        CircuitBreaker annotationCB = circuitBreakerRegistry.circuitBreaker("annotationCB");
+        printCircuitBreakerConfigs(annotationCB);
+        return ordersHistoryClient.getOrdersException().subList(0, 2);
+    }
+
+     /*
+   Fallback methods -> should be placed in the same class
+                    -> must have the same method signature with just ONE extra target exception parameter.
+
+    If there are multiple fallbackMethod methods, the method that has the most closest match will be invoked
+    */
+
+    public List<String> getDefaultRecommendations(RetryableException e) {
+        return List.of("Fallback Java Book 1", "Fallback Java Book 2");
+    }
+
+    public List<String> getDefaultRecommendations(CallUnsuccessful e) {
+        return List.of("Fallback Java Book 3", "Fallback Java Book 4");
+    }
+
     public void replaceCB() {
         System.out.println("BEFORE: circuit breakers:" + circuitBreakerRegistry.getAllCircuitBreakers());
 
@@ -151,7 +177,6 @@ public class CircuitBreakerRecommendationsService {
         String cbConfigs = new StringBuilder().append(circuitBreaker.getName()).append(": \n")
                 .append("- SLIDING_WINDOW_TYPE: " + circuitBreakerConfig.getSlidingWindowType() + "\n")
                 .append("- SLIDING_WINDOW_SIZE: " + circuitBreakerConfig.getSlidingWindowSize() + "\n")
-                .append("- MINIMUM_NUMBER_OF_CALLS: " + circuitBreakerConfig.getMinimumNumberOfCalls() + "\n")
                 .append("- FAILURE_RATE_THRESHOLD: " + circuitBreakerConfig.getFailureRateThreshold() + "\n")
                 .append("- PERMITTED_CALLS_IN_HALF_OPEN_STATE: " + circuitBreakerConfig
                         .getPermittedNumberOfCallsInHalfOpenState())
