@@ -13,6 +13,9 @@ resilience4j.circuitbreaker:
       baseConfig: default
       permittedNumberOfCallsInHalfOpenState: 24
       waitDurationInOpenState: 5000
+    oldCB:
+      baseConfig: default
+      permittedNumberOfCallsInHalfOpenState: 11
 # circuit-breaker-aspect-order: 2
 
 

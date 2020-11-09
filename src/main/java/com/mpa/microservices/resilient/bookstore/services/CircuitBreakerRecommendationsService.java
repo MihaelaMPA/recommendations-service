@@ -80,7 +80,6 @@ public class CircuitBreakerRecommendationsService {
                 .permittedNumberOfCallsInHalfOpenState(2)
 //                .ignoreExceptions(CallUnsuccessful.class, ExceptionInInitializerError.class)
                 .build();
-
         //STATE: CLOSED -> 2 exceptions must be triggered in order to switch from CLOSED -> OPEN
         // (failureRateThreshold = 50%)
         //STATE: OPEN -> after 2 seconds the state is automatically changed from OPEN -> HALF_OPEN
@@ -110,6 +109,15 @@ public class CircuitBreakerRecommendationsService {
             }
         }
         return orderHistory.subList(0, 2);
+    }
+
+    public void replaceCB() {
+        System.out.println("BEFORE: circuit breakers:" + circuitBreakerRegistry.getAllCircuitBreakers());
+
+        CircuitBreaker newCircuitBreaker = CircuitBreaker.ofDefaults("newCB");
+        circuitBreakerRegistry.replace("oldCB", newCircuitBreaker);
+
+        System.out.println("AFTER: circuit breakers:" + circuitBreakerRegistry.getAllCircuitBreakers());
     }
 
     public List<String> getRecommendationsFeignBuilder() {
@@ -160,5 +168,5 @@ public class CircuitBreakerRecommendationsService {
                 .toString();
         System.out.println(cbConfigs);
     }
-}
 
+}
