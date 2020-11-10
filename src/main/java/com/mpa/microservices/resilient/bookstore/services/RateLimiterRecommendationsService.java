@@ -38,8 +38,6 @@ public class RateLimiterRecommendationsService {
                         .build())
                 .retrieve()
                 .bodyToMono(List.class)
-                //add the rateLimiter using the RateLimiterOperator.
-                //using the transform means that the RateLimiter will be added before the call is made
                 .transform(RateLimiterOperator.of(rateLimiter))
                 .onErrorResume(error -> Mono.just(recommendationsServiceFallback.getDefaultRecommendations()));
 

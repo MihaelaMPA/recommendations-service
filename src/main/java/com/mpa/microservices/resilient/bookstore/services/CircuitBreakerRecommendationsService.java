@@ -43,19 +43,10 @@ public class CircuitBreakerRecommendationsService {
         return ordersHistoryClient.getOrdersForCB().subList(0, 2);
     }
 
-    //call order history service with a default config CB and fallback
     public List<String> getRecommendationsWithFallback() {
         CircuitBreaker defaultCB = CircuitBreaker.ofDefaults("default");
         List<String> orders = defaultCB
-                //decorate and execute Supplier
-                //handle exceptions in a functional way with Try from Vavr-> https://www.baeldung.com/vavr-try
-
-                //we are not obliged to use try, as a matter of a fact you will see the
-                //try catch block for the same call
-                // you can think of Try like Optional, but in case of exception it is not empty, it contains the
-                //exception. To avoid
                 .executeTrySupplier(() -> Try.of(() -> ordersHistoryClient.getOrdersForCB()))
-                //fallback (we can even fallback from CallNotPermittedException)
                 .recover(RetryableException.class,
                         exception -> recommendationsServiceFallback.getDefaultRecommendations())
                 .recover(CallNotPermittedException.class,
@@ -92,9 +83,7 @@ public class CircuitBreakerRecommendationsService {
                 countBasedCB.reset();
             }
             try {
-                // Call service every 1 second.
                 Thread.sleep(1000);
-                // Decorate service call with CB and execute
                 orderHistory = countBasedCB.executeSupplier(() -> ordersHistoryClient.getOrdersForCB());
                 System.out.println(orderHistory);
             } catch (Exception e) {
@@ -107,12 +96,7 @@ public class CircuitBreakerRecommendationsService {
     }
 
 
-    /*
-    annotationCB will take the default props from application.yml;
-    The Resilience4j Aspects order is following:
-    Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
-     so Retry is applied at the end (if needed).
-     */
+    //Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
     @io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker(name = "annotationCB"
             , fallbackMethod = "getDefaultRecommendations")
 //    @RateLimiter(name = "propsRL")
@@ -121,13 +105,6 @@ public class CircuitBreakerRecommendationsService {
         printCircuitBreakerConfigs(annotationCB);
         return ordersHistoryClient.getOrdersException().subList(0, 2);
     }
-
-     /*
-   Fallback methods -> should be placed in the same class
-                    -> must have the same method signature with just ONE extra target exception parameter.
-
-    If there are multiple fallbackMethod methods, the method that has the most closest match will be invoked
-    */
 
     public List<String> getDefaultRecommendations(RetryableException e) {
         return List.of("Fallback Java Book 1", "Fallback Java Book 2");
@@ -149,7 +126,6 @@ public class CircuitBreakerRecommendationsService {
     public List<String> getRecommendationsFeignBuilder() {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("propsCB");
         RateLimiter rateLimiter = rateLimiterRegistry.rateLimiter("propsRL");
-        //The order in which decorators are applied correspond to the order in which they are declared.
         FeignDecorators decorators = FeignDecorators.builder()
                 .withRateLimiter(rateLimiter)
                 .withCircuitBreaker(circuitBreaker)
